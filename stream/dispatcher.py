@@ -1,5 +1,8 @@
+"""Usage: python dispatcher.py [SECONDS]   (runs until Ctrl+C, or for SECONDS seconds)"""
 import json
+import os
 import random
+import sys
 import time
 from datetime import datetime, timezone
 
@@ -14,14 +17,24 @@ ZONES = {
 TYPES = ["ride", "food"]
 
 
+def connect():
+    # a hosted broker URL can be given via AMQP_URL (keep it out of Git); default is local
+    url = os.environ.get("AMQP_URL")
+    params = pika.URLParameters(url) if url else pika.ConnectionParameters("localhost")
+    return pika.BlockingConnection(params)
+
+
 def main():
-    conn = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
+    duration = float(sys.argv[1]) if len(sys.argv) > 1 else None
+    conn = connect()
     ch = conn.channel()
     ch.exchange_declare(exchange=EXCHANGE, exchange_type="topic")
 
+    time.sleep(2)  # give drivers a moment to register their queues
+    start = time.time()
     n = 0
     try:
-        while True:
+        while duration is None or time.time() - start < duration:
             n += 1
             city = random.choice(CITIES)
             zone = random.choice(ZONES[city])
@@ -29,9 +42,8 @@ def main():
             msg = {"id": n, "city": city, "zone": zone, "type": rtype,
                    "ts": datetime.now(timezone.utc).isoformat()}
             key = f"{city}.{zone}.{rtype}"
-            if n % 10 == 0:  # every 10th message is bad: no zone (D3)
+            if n % 10 == 0:  # D3: every 10th message is bad (the zone field is missing)
                 del msg["zone"]
-                key = f"{city}.unknown.{rtype}"
             ch.basic_publish(exchange=EXCHANGE, routing_key=key, body=json.dumps(msg))
             print(f"sent #{n} key={key} body={msg}", flush=True)
             time.sleep(2)

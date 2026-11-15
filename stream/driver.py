@@ -1,5 +1,6 @@
 """Usage: python driver.py NAME PATTERN   e.g. python driver.py Ravi "bangalore.koramangala.*" """
 import json
+import os
 import sys
 
 import pika
@@ -7,9 +8,15 @@ import pika
 EXCHANGE = "rapido-dispatch"
 
 
+def connect():
+    url = os.environ.get("AMQP_URL")  # optional hosted broker; default is local
+    params = pika.URLParameters(url) if url else pika.ConnectionParameters("localhost")
+    return pika.BlockingConnection(params)
+
+
 def main():
     name, pattern = sys.argv[1], sys.argv[2]
-    conn = pika.BlockingConnection(pika.ConnectionParameters("localhost"))
+    conn = connect()
     ch = conn.channel()
     ch.exchange_declare(exchange=EXCHANGE, exchange_type="topic")
     # private queue: server-named, exclusive to this connection, deleted on exit
@@ -18,11 +25,11 @@ def main():
 
     def on_message(channel, method, properties, body):
         req = json.loads(body)
-        if "zone" not in req:  # D3: reject bad message, do not requeue
-            print(f"[{name}] BAD message {method.routing_key} {req} -> NACK", flush=True)
+        if "zone" not in req:  # D3: reject a bad message, do not requeue it
+            print(f"[{name}] BAD   key={method.routing_key} {req} -> NACK (discarded)", flush=True)
             channel.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
         else:
-            print(f"[{name}] got {method.routing_key} {req} -> ACK", flush=True)
+            print(f"[{name}] GOT   key={method.routing_key} {req} -> ACK", flush=True)
             channel.basic_ack(delivery_tag=method.delivery_tag)
 
     ch.basic_consume(queue=queue, on_message_callback=on_message, auto_ack=False)

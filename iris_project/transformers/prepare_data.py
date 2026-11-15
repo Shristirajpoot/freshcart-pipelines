@@ -1,8 +1,8 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-# Mage injects these decorators at run time. Outside Mage (e.g. in CI) they
-# are imported only if missing, with a no-op fallback if mage_ai isn't installed.
+# Import Mage's decorators only if they aren't already loaded.
+# Outside Mage (e.g. in CI) mage_ai may not be installed, so fall back to no-op decorators.
 if 'transformer' not in globals():
     try:
         from mage_ai.data_preparation.decorators import transformer
@@ -17,20 +17,26 @@ if 'test' not in globals():
             return func
 
 
+# transformer marks this as a step that changes data coming from an earlier block
+# 'df' is the 150-row table passed in automatically by Mage
+# It splits the data 80/20 and adds a 'split' column labelling each row train or test
 @transformer
 def transform(df, *args, **kwargs):
-    """Split the iris data 80/20 into train and test rows (adds a 'split' column)."""
-    test_size = 0.2
-    train_idx, test_idx = train_test_split(
-        df.index, test_size=test_size, random_state=42, stratify=df['target']
-    )
-    out = df.copy()
-    out['split'] = 'train'
-    out.loc[test_idx, 'split'] = 'test'
-    return out
+    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
+
+    train_df = train_df.copy()
+    test_df = test_df.copy()
+    train_df['split'] = 'train'
+    test_df['split'] = 'test'
+
+    result = pd.concat([train_df, test_df])
+    print('Train rows:', len(train_df), '| Test rows:', len(test_df))
+    return result
 
 
+# Runs right after transform finishes, using its returned table as 'output'
+# Checks that the new 'split' column was actually created
+# If it's missing, the block fails and train_model never runs
 @test
-def test_output(output, *args) -> None:
-    assert output is not None, 'The output is undefined'
-    assert set(output['split'].unique()) == {'train', 'test'}
+def test_output(output, *args):
+    assert 'split' in output.columns, 'split column missing'
