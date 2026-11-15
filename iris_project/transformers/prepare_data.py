@@ -20,7 +20,7 @@ if 'test' not in globals():
 @transformer
 def transform(df, *args, **kwargs):
     """Split the iris data 80/20 into train and test rows (adds a 'split' column)."""
-    test_size = 0.2
+    test_size = 0.3
     train_idx, test_idx = train_test_split(
         df.index, test_size=test_size, random_state=42, stratify=df['target']
     )
