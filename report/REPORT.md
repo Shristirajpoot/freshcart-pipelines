@@ -123,7 +123,8 @@ Executed top-to-bottom on Snowflake (`Account: EIDQMJJ-DX74528`, `Role: ACCOUNTA
    - Currency is `INR`, so `ref.fx_daily` gives `fx_rate = 1.0000`.
    - $	exttt{amount\_inr} = 	ext{ROUND}(2100.00 	imes 1.0000,\ 2) = \mathbf{2100.00}$.
    - Meera (`meera@outlook.com`, `CUST-03`) has tier `Platinum` in `dim.customers_scd2`, which joins to `ref.tier_multiplier` for $	exttt{multiplier} = 3$.
-   - $	exttt{loyalty\_points} = \lfloor 2100.00 / 100 floor 	imes 3 = 21 	imes 3 = \mathbf{63}$.
+   - $	exttt{loyalty\_points} = \lfloor 2100.00 / 100 
+floor 	imes 3 = 21 	imes 3 = \mathbf{63}$.
 
 #### Brief Trace of `ORD-1005` vs `ORD-1001` (Priya's Tier Multiplier)
 - **Table responsible:** `dim.customers_scd2` (joined with `ref.tier_multiplier` in `SQL_40_GOLD`).
@@ -136,8 +137,10 @@ Executed top-to-bottom on Snowflake (`Account: EIDQMJJ-DX74528`, `Role: ACCOUNTA
 - **Why the multiplier changes:** In `dim.customers_scd2`, Priya (`CUST-01`, `priya.r@gmail.com`) has two SCD Type 2 rows:
   1. `Silver` (`multiplier = 1`): `valid_from = 2023-04-10`, `valid_to = 2026-09-02`.
   2. `Gold` (`multiplier = 2`): `valid_from = 2026-09-03`, `valid_to = 9999-12-31`.
-  - `ORD-1001` has `order_date = 2026-09-01`, which falls between `2023-04-10` and `2026-09-02` (**Silver**, multiplier `1` → $\lfloor 1250/100 floor 	imes 1 = 12$ points).
-  - `ORD-1005` has `order_date = 2026-09-03`, which falls in the second period starting `2026-09-03` (**Gold**, multiplier `2` → $\lfloor 899/100 floor 	imes 2 = 8 	imes 2 = 16$ points).
+  - `ORD-1001` has `order_date = 2026-09-01`, which falls between `2023-04-10` and `2026-09-02` (**Silver**, multiplier `1` → $\lfloor 1250/100 
+floor 	imes 1 = 12$ points).
+  - `ORD-1005` has `order_date = 2026-09-03`, which falls in the second period starting `2026-09-03` (**Gold**, multiplier `2` → $\lfloor 899/100 
+floor 	imes 2 = 8 	imes 2 = 16$ points).
 
 ---
 
@@ -175,7 +178,8 @@ Added CRM event: `{"cust_id": "CUST-02", "email": "arjun.k@yahoo.in", "tier": "G
 |---|---|---|
 | Rows for `CUST-02` in `dim.customers_scd2` | **2** (`Silver`: `2024-01-15` to `2026-08-14`; `Gold`: `2026-08-15` to `9999-12-31`) | **2** |
 | Tier used for `ORD-1002` | **Gold** (`order_date = 2026-09-01` is $\ge$ `2026-08-15`) | **Gold** |
-| Loyalty points for `ORD-1002` | **70** ($	ext{USD } 42.50 	imes 83.20 = ₹3536.00$; $\lfloor 3536/100 floor 	imes 2 = 35 	imes 2 = 70$) | **70** |
+| Loyalty points for `ORD-1002` | **70** ($	ext{USD } 42.50 	imes 83.20 = ₹3536.00$; $\lfloor 3536/100 
+floor 	imes 2 = 35 	imes 2 = 70$) | **70** |
 | Total loyalty points in gold | **161** ($12 + 70 + 63 + 16 = 161$, up by $+35$ from $126$) | **161** |
 | Number of gold rows whose `published_at` changed | **1** (only `ORD-1002`) | **1 (`['ORD-1002']`)** |
 
@@ -429,3 +433,74 @@ Connected Part D (RabbitMQ) to Part B (FreshCart Snowflake ELT) at the end of `e
 3. `write_landing("web", msgs, run_id)` saved the batch as `/content/freshcart_landing/web/web__20261115_111321_stream.json.gz`, `load_file()` staged and copied the 3 rows into `bronze.orders_raw`, and `transform_all(run_id)` executed `SQL_10` through `SQL_40_GOLD`.
 4. **First batch run result:** `GOLD: (7, Decimal('11747.00'), 247)` ($7785 + 1500 + 800 + 1662 = ₹11,747.00$; $161 + 30 + 24 + 32 = 247$ points).
 5. **Second batch run result (idempotency proof):** Running `stream_batch(60)` a second time loaded 3 more raw rows into `bronze.orders_raw`, but `SQL_20_ORDERS_DEDUP` and `SQL_40_GOLD`'s `MERGE` with `row_hash` left `gold.fct_orders` completely unchanged at **`GOLD: (7, Decimal('11747.00'), 247)`** (see Appendix Figure B8).
+
+
+---
+
+## Appendix: Execution Screenshots
+
+### Figure A1 (Part A3): GitHub Actions — Green (Passing) CI Run (#1)
+![Figure A1 (Part A3): GitHub Actions — Green (Passing) CI Run (#1)](screenshots/fig_a3_1_ci_green.png)
+
+### Figure A2 (Part A3): GitHub Actions — Red (Failing) CI Run (#2, test_size = 0.3)
+![Figure A2 (Part A3): GitHub Actions — Red (Failing) CI Run (#2, test_size = 0.3)](screenshots/fig_a3_2_ci_red.png)
+
+### Figure A3 (Part A3): GitHub Actions — Commit Fixing test_size Back to 0.2 (#3, Passing)
+![Figure A3 (Part A3): GitHub Actions — Commit Fixing test_size Back to 0.2 (#3, Passing)](screenshots/fig_a3_3_ci_fixed.png)
+
+### Figure A4 (Part A3): GitHub Actions — Complete Workflow History (Green -> Red -> Fixed Green)
+![Figure A4 (Part A3): GitHub Actions — Complete Workflow History (Green -> Red -> Fixed Green)](screenshots/fig_a3_4_ci_all_runs.png)
+
+### Figure B1 (Part B1): Baseline Run — Raw Order Rows in bronze.orders_raw (8 rows: 6 web + 2 mobile)
+![Figure B1 (Part B1): Baseline Run — Raw Order Rows in bronze.orders_raw (8 rows: 6 web + 2 mobile)](screenshots/fig_b1_1_bronze_raw.png)
+
+### Figure B2 (Part B1): Baseline Run — Rows Passing Cleaning in silver.orders_clean (6 rows)
+![Figure B2 (Part B1): Baseline Run — Rows Passing Cleaning in silver.orders_clean (6 rows)](screenshots/fig_b1_2_silver_clean.png)
+
+### Figure B3 (Part B1): Baseline Run — Quarantined Rows in quarantine.orders (2 rows: ORD-1006, ORD-1004)
+![Figure B3 (Part B1): Baseline Run — Quarantined Rows in quarantine.orders (2 rows: ORD-1006, ORD-1004)](screenshots/fig_b1_3_quarantine.png)
+
+### Figure B4 (Part B1): Baseline Run — Orders After Deduplication in silver.orders_dedup (4 rows)
+![Figure B4 (Part B1): Baseline Run — Orders After Deduplication in silver.orders_dedup (4 rows)](screenshots/fig_b1_4_silver_dedup.png)
+
+### Figure B5 (Part B1): Baseline Run — Enriched Gold Table gold.fct_orders (4 orders)
+![Figure B5 (Part B1): Baseline Run — Enriched Gold Table gold.fct_orders (4 orders)](screenshots/fig_b1_5_gold_table.png)
+
+### Figure B6 (Part B1): Baseline Run — Final Gold Totals (4 orders, revenue ₹7,785.00, 126 loyalty points)
+![Figure B6 (Part B1): Baseline Run — Final Gold Totals (4 orders, revenue ₹7,785.00, 126 loyalty points)](screenshots/fig_b1_6_gold_totals.png)
+
+### Figure B7 (Part B1): Baseline Summary Verification Query Across All Tables
+![Figure B7 (Part B1): Baseline Summary Verification Query Across All Tables](screenshots/fig_b1_7_summary_query.jpg)
+
+### Figure B8 (Part B2): Record Trace Outputs for ORD-1003 (Bronze -> Silver -> Dedup -> Gold) and ORD-1005 vs ORD-1001
+![Figure B8 (Part B2): Record Trace Outputs for ORD-1003 (Bronze -> Silver -> Dedup -> Gold) and ORD-1005 vs ORD-1001](screenshots/fig_b2_trace.jpg)
+
+### Figure B9 (Part B3): Validation Rule — ORD-1006 Reasons BEFORE Adding unsupported_currency
+![Figure B9 (Part B3): Validation Rule — ORD-1006 Reasons BEFORE Adding unsupported_currency](screenshots/fig_b3_1_before.jpg)
+
+### Figure B10 (Part B3): SQL_10_ORDERS_CLEAN — Added unsupported_currency Rule and NOT EXISTS Quarantine Guard
+![Figure B10 (Part B3): SQL_10_ORDERS_CLEAN — Added unsupported_currency Rule and NOT EXISTS Quarantine Guard](screenshots/fig_b3_2_sql_rule.jpg)
+
+### Figure B11 (Part B3): Validation Rule — ORD-1006 Reasons AFTER Change (with unsupported_currency) & Quarantine Count = 1
+![Figure B11 (Part B3): Validation Rule — ORD-1006 Reasons AFTER Change (with unsupported_currency) & Quarantine Count = 1](screenshots/fig_b3_3_after.jpg)
+
+### Figure B12 (Part B4): SCD2 Tier Change (CUST-02 to Gold) — Before vs After Snapshot (2 SCD2 rows, 70 pts, 161 total, 1 row updated)
+![Figure B12 (Part B4): SCD2 Tier Change (CUST-02 to Gold) — Before vs After Snapshot (2 SCD2 rows, 70 pts, 161 total, 1 row updated)](screenshots/fig_b4_scd2_idempotency.jpg)
+
+### Figure B13 (Part B5): Sixth Data-Quality Check Added to quality_checks() (All 6 Checks 0 OK)
+![Figure B13 (Part B5): Sixth Data-Quality Check Added to quality_checks() (All 6 Checks 0 OK)](screenshots/fig_b5_1_check_ok.jpg)
+
+### Figure B14 (Part B5): Sixth Check Failing on Purpose with Mock Order ORD-9001 (1 PROBLEM)
+![Figure B14 (Part B5): Sixth Check Failing on Purpose with Mock Order ORD-9001 (1 PROBLEM)](screenshots/fig_b5_2_check_problem.jpg)
+
+### Figure B15 (Part B5): Mock Order ORD-9001 Removed and Cleaned Up — All 6 Checks Restored to 0 OK
+![Figure B15 (Part B5): Mock Order ORD-9001 Removed and Cleaned Up — All 6 Checks Restored to 0 OK](screenshots/fig_b5_3_check_cleaned.jpg)
+
+### Figure C1 (Part C3 & C4): Mage UI Pipeline Graph via Cloudflare Tunnel Showing Evaluation Branch & check_data Block
+![Figure C1 (Part C3 & C4): Mage UI Pipeline Graph via Cloudflare Tunnel Showing Evaluation Branch & check_data Block](screenshots/fig_c3_mage_ui.png)
+
+### Figure Bonus-1 (Bonus): RabbitMQ Producer & 1-Minute Consumer Streaming Orders into Snowflake Lakehouse
+![Figure Bonus-1 (Bonus): RabbitMQ Producer & 1-Minute Consumer Streaming Orders into Snowflake Lakehouse](screenshots/fig_bonus_1_code.jpg)
+
+### Figure Bonus-2 (Bonus): Running the Streamed Batch Twice — Gold Totals Stay (7, 11747.00, 247) Without Doubling
+![Figure Bonus-2 (Bonus): Running the Streamed Batch Twice — Gold Totals Stay (7, 11747.00, 247) Without Doubling](screenshots/fig_bonus_2_idempotent.jpg)
